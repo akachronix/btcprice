@@ -9,7 +9,7 @@ static size_t writeToString(void* ptr, size_t size, size_t count, void* stream) 
     return size * count;
 }
 
-int main(int argc, const char* argv[])
+static int curlGetData(const char* url, std::string& response)
 {
     CURL* curl = curl_easy_init();
     if (!curl) {
@@ -17,9 +17,7 @@ int main(int argc, const char* argv[])
         return EXIT_FAILURE;
     }
 
-    std::string response;
-
-    curl_easy_setopt(curl, CURLOPT_URL, "https://api.coindesk.com/v1/bpi/currentprice.json");
+    curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeToString);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
 
@@ -29,16 +27,26 @@ int main(int argc, const char* argv[])
     }
 
     curl_easy_cleanup(curl);
+    return EXIT_SUCCESS;
+}
+
+int main(int argc, const char* argv[])
+{
+    std::string coindesk;
+    curlGetData("https://api.coindesk.com/v1/bpi/currentprice.json", coindesk);
 
     JSONCPP_STRING err;
     Json::Value root;
     Json::CharReaderBuilder builder;
     const std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
 
-    if (!reader->parse(response.c_str(), response.c_str() + static_cast<int>(response.length()), &root, &err)) {
+    if (!reader->parse(coindesk.c_str(), coindesk.c_str() + static_cast<int>(coindesk.length()), &root, &err)) {
         std::cout << "Error parsing JSON\n";
         return EXIT_FAILURE;
     }
+
+    std::string lastUpdated = root.get("time", 0).get("updated", 0).asString();
+    std::cout << "Data last updated: " << lastUpdated << '\n';
     
     float btcPrice = root.get("bpi", 0).get("USD", 0).get("rate_float", 0).asFloat();
     std::cout << "1 BTC = $" << btcPrice << '\n';
