@@ -21,8 +21,10 @@ static int curlGetData(const char* url, std::string& response)
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeToString);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
 
-    if (curl_easy_perform(curl) != CURLE_OK) {
-        std::cout << "Error getting data from Coindesk\n";
+    CURLcode e = curl_easy_perform(curl);
+
+    if (e != CURLE_OK) {
+        std::cout << "Error getting data from Coindesk: " << curl_easy_strerror(e) << '\n';
         return EXIT_FAILURE;
     }
 
@@ -30,30 +32,51 @@ static int curlGetData(const char* url, std::string& response)
     return EXIT_SUCCESS;
 }
 
-int main(int argc, const char* argv[])
+static Json::Value parseJson(std::string& rawJsonData)
 {
-    std::string coindesk;
-    curlGetData("https://api.coindesk.com/v1/bpi/currentprice.json", coindesk);
-
     JSONCPP_STRING err;
     Json::Value root;
     Json::CharReaderBuilder builder;
     const std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
 
-    if (!reader->parse(coindesk.c_str(), coindesk.c_str() + static_cast<int>(coindesk.length()), &root, &err)) {
+    if (!reader->parse(rawJsonData.c_str(), rawJsonData.c_str() + static_cast<int>(rawJsonData.length()), &root, &err)) {
         std::cout << "Error parsing JSON\n";
         return EXIT_FAILURE;
     }
 
-    std::string lastUpdated = root.get("time", 0).get("updated", 0).asString();
+    return root;
+}
+
+int main(int argc, const char* argv[])
+{
+    std::string coindesk;
+    curlGetData("https://api.coindesk.com/v1/bpi/currentprice.json", coindesk);
+
+    Json::Value parsedJson = parseJson(coindesk);
+    
+    std::string lastUpdated = parsedJson.get("time", 0).get("updated", 0).asString();
     std::cout << "Data last updated: " << lastUpdated << '\n';
     
-    float btcPrice = root.get("bpi", 0).get("USD", 0).get("rate_float", 0).asFloat();
-    std::cout << "1 BTC = $" << btcPrice << '\n';
+    float btcPriceUSD = parsedJson.get("bpi", 0).get("USD", 0).get("rate_float", 0).asFloat();
+    std::cout << "1 BTC = $" << btcPriceUSD << '\n';
 
-    if (argc > 1) {
-        float btcAmount = std::stof(argv[1]);
-        std::cout << "The value of " << btcAmount << " BTC is $" << btcAmount * btcPrice << "\n";
+    if (argc > 1) 
+    {
+        int offset = 0;
+
+        bool setPrice = strcmp(argv[1], "-price") ? false : true;
+        if (setPrice) {
+            btcPriceUSD = atof(argv[2]);
+            std::cout << "Price has been set to: $" << btcPriceUSD << '\n';
+            offset += 2;
+        }
+
+        float btcAmount = 0.0;
+        for (int i = 1 + offset; i < argc; i++) {
+            btcAmount += atof(argv[i]);
+        }
+
+        std::cout << "The value of " << btcAmount << " BTC is $" << btcAmount * btcPriceUSD << "\n";
     }
 
     return EXIT_SUCCESS;
