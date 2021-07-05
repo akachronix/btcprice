@@ -18,7 +18,7 @@ jsoncpp:
 	make
 
 $(target): $(object_files) jsoncpp
-	g++ $(compiler_flags) -o $(target) $(object_files) -ljsoncpp -lcurl
+	g++ $(compiler_flags) -o $(target) $(object_files) -lncurses -ljsoncpp -lcurl
 
 $(object_files): build/%.o : src/%.cpp jsoncpp
 	mkdir -p $(dir $@) && \
